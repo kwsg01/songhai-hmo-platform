@@ -19,29 +19,40 @@ app.use(session({
 }));
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:8080',
+    origin: process.env.CORS_ORIGIN || '*',
     credentials: true
 }));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Database connection
-const db = mysql.createConnection({
+// Create database connection pool (better for cloud)
+const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || 'U13ps1060@',
+    password: process.env.DB_PASS || '',
     database: process.env.DB_NAME || 'hmo_system',
     port: process.env.DB_PORT || 3306,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
+    ...(process.env.DB_SSL === 'true' && { ssl: { rejectUnauthorized: false } })
 });
 
-db.connect((err) => {
+// Test connection on startup
+pool.getConnection((err, connection) => {
     if (err) {
-        console.error('Database error:', err);
+        console.error('❌ Database connection failed:', err.message);
+        console.error('Check your environment variables on Render');
         return;
     }
-    console.log('✅ MySQL connected');
+    console.log('✅ MySQL connected successfully');
+    connection.release();
 });
+
+// Use promise wrapper
+const db = pool.promise();
 
 // Serve homepage
 app.get('/', (req, res) => {
@@ -49,37 +60,44 @@ app.get('/', (req, res) => {
 });
 
 // ============ ADMIN AUTHENTICATION ============
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
     if (!req.session.adminId) {
         return res.status(401).json({ error: 'Authentication required' });
     }
     next();
 }
 
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
     const { username, password } = req.body;
-    db.query('SELECT * FROM admin_users WHERE (username = ? OR email = ?) AND password = ?',
-        [username, username, password],
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (results.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-            
-            const admin = results[0];
-            req.session.adminId = admin.id;
-            req.session.adminName = admin.full_name;
-            req.session.adminRole = admin.role;
-            req.session.username = admin.username;
-            
-            res.json({
-                success: true,
-                admin: {
-                    id: admin.id,
-                    username: admin.username,
-                    full_name: admin.full_name,
-                    role: admin.role
-                }
-            });
+    try {
+        const [results] = await db.query(
+            'SELECT * FROM admin_users WHERE (username = ? OR email = ?) AND password = ?',
+            [username, username, password]
+        );
+        
+        if (results.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        const admin = results[0];
+        req.session.adminId = admin.id;
+        req.session.adminName = admin.full_name;
+        req.session.adminRole = admin.role;
+        req.session.username = admin.username;
+        
+        res.json({
+            success: true,
+            admin: {
+                id: admin.id,
+                username: admin.username,
+                full_name: admin.full_name,
+                role: admin.role
+            }
         });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Database error: ' + err.message });
+    }
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -103,183 +121,224 @@ app.get('/api/admin/check-session', (req, res) => {
 });
 
 // ============ ENROLLEES ============
-app.get('/api/enrollees', requireAuth, (req, res) => {
-    db.query('SELECT * FROM enrollees ORDER BY created_at DESC', (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/enrollees', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT * FROM enrollees ORDER BY created_at DESC');
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/enrollees', requireAuth, (req, res) => {
+app.post('/api/enrollees', requireAuth, async (req, res) => {
     const { first_name, last_name, email, phone, plan_type } = req.body;
-    db.query('INSERT INTO enrollees (first_name, last_name, email, phone, plan_type) VALUES (?, ?, ?, ?, ?)',
-        [first_name, last_name, email, phone, plan_type],
-        (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Enrollee added', id: result.insertId });
-        });
+    try {
+        const [result] = await db.query(
+            'INSERT INTO enrollees (first_name, last_name, email, phone, plan_type) VALUES (?, ?, ?, ?, ?)',
+            [first_name, last_name, email, phone, plan_type]
+        );
+        res.json({ message: 'Enrollee added', id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ============ CLAIMS ============
-app.get('/api/claims', requireAuth, (req, res) => {
-    db.query(`SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name
-              FROM claims 
-              JOIN enrollees ON claims.enrollee_id = enrollees.id 
-              ORDER BY claims.submitted_at DESC`, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/claims', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name
+            FROM claims 
+            JOIN enrollees ON claims.enrollee_id = enrollees.id 
+            ORDER BY claims.submitted_at DESC
+        `);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/callcentre/pending-claims', requireAuth, (req, res) => {
-    db.query(`SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name,
-              enrollees.phone as enrollee_phone,
-              providers.provider_name, providers.email as provider_email
-              FROM claims 
-              JOIN enrollees ON claims.enrollee_id = enrollees.id 
-              JOIN providers ON claims.provider_id = providers.id
-              WHERE claims.status = 'Pending'
-              ORDER BY claims.submitted_at ASC`, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/callcentre/pending-claims', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name,
+            enrollees.phone as enrollee_phone,
+            providers.provider_name, providers.email as provider_email
+            FROM claims 
+            JOIN enrollees ON claims.enrollee_id = enrollees.id 
+            JOIN providers ON claims.provider_id = providers.id
+            WHERE claims.status = 'Pending'
+            ORDER BY claims.submitted_at ASC
+        `);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/claims', requireAuth, (req, res) => {
+app.post('/api/claims', requireAuth, async (req, res) => {
     const { enrollee_id, provider_id, provider_name, service_description, amount } = req.body;
-    db.query('INSERT INTO claims (enrollee_id, provider_id, provider_name, service_description, amount, status) VALUES (?, ?, ?, ?, ?, "Pending")',
-        [enrollee_id, provider_id, provider_name, service_description, amount],
-        (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Claim submitted', id: result.insertId });
-        });
+    try {
+        const [result] = await db.query(
+            'INSERT INTO claims (enrollee_id, provider_id, provider_name, service_description, amount, status) VALUES (?, ?, ?, ?, ?, "Pending")',
+            [enrollee_id, provider_id, provider_name, service_description, amount]
+        );
+        res.json({ message: 'Claim submitted', id: result.insertId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.put('/api/claims/:id', requireAuth, (req, res) => {
+app.put('/api/claims/:id', requireAuth, async (req, res) => {
     const { status, admin_notes } = req.body;
-    db.query('UPDATE claims SET status = ?, admin_notes = ? WHERE id = ?',
-        [status, admin_notes, req.params.id],
-        (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ message: 'Claim updated' });
-        });
+    try {
+        await db.query(
+            'UPDATE claims SET status = ?, admin_notes = ? WHERE id = ?',
+            [status, admin_notes, req.params.id]
+        );
+        res.json({ message: 'Claim updated' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ============ PROVIDERS ============
-app.get('/api/providers', requireAuth, (req, res) => {
-    db.query('SELECT id, provider_name, email FROM providers', (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/providers', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT id, provider_name, email FROM providers');
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.post('/api/provider/login', (req, res) => {
+app.post('/api/provider/login', async (req, res) => {
     const { email, password } = req.body;
-    db.query('SELECT * FROM providers WHERE email = ? AND password = ?',
-        [email, password],
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (results.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-            res.json({
-                id: results[0].id,
-                provider_name: results[0].provider_name,
-                email: results[0].email
-            });
+    try {
+        const [results] = await db.query(
+            'SELECT * FROM providers WHERE email = ? AND password = ?',
+            [email, password]
+        );
+        if (results.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        res.json({
+            id: results[0].id,
+            provider_name: results[0].provider_name,
+            email: results[0].email
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/provider/:id/claims', (req, res) => {
-    db.query(`SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name 
-              FROM claims 
-              JOIN enrollees ON claims.enrollee_id = enrollees.id 
-              WHERE claims.provider_id = ?
-              ORDER BY claims.submitted_at DESC`,
-        [req.params.id],
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(results);
-        });
+app.get('/api/provider/:id/claims', async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name 
+            FROM claims 
+            JOIN enrollees ON claims.enrollee_id = enrollees.id 
+            WHERE claims.provider_id = ?
+            ORDER BY claims.submitted_at DESC
+        `, [req.params.id]);
+        res.json(results);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ============ CALL CENTRE ============
-app.post('/api/callcentre/login', (req, res) => {
+app.post('/api/callcentre/login', async (req, res) => {
     const { email, password } = req.body;
-    db.query('SELECT * FROM call_centre_staff WHERE email = ? AND password = ?',
-        [email, password],
-        (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (results.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-            res.json({
-                id: results[0].id,
-                full_name: results[0].full_name,
-                email: results[0].email,
-                employee_id: results[0].employee_id
-            });
+    try {
+        const [results] = await db.query(
+            'SELECT * FROM call_centre_staff WHERE email = ? AND password = ?',
+            [email, password]
+        );
+        if (results.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        res.json({
+            id: results[0].id,
+            full_name: results[0].full_name,
+            email: results[0].email,
+            employee_id: results[0].employee_id
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // ============ DASHBOARD ============
-app.get('/api/dashboard/stats', requireAuth, (req, res) => {
-    const queries = {
-        totalEnrollees: 'SELECT COUNT(*) as count FROM enrollees',
-        totalClaims: 'SELECT COUNT(*) as count FROM claims',
-        totalPending: 'SELECT COUNT(*) as count FROM claims WHERE status = "Pending"',
-        totalApproved: 'SELECT COUNT(*) as count FROM claims WHERE status = "Approved"',
-        totalRejected: 'SELECT COUNT(*) as count FROM claims WHERE status = "Rejected"',
-        totalAmount: 'SELECT SUM(amount) as total FROM claims WHERE status = "Approved"'
-    };
-    
-    Promise.all(Object.values(queries).map(sql => 
-        new Promise((resolve, reject) => {
-            db.query(sql, (err, result) => {
-                if (err) reject(err);
-                else resolve(result[0]);
-            });
-        })
-    )).then(results => {
-        const keys = Object.keys(queries);
-        const response = {};
-        results.forEach((result, index) => {
-            response[keys[index].replace('total', '').toLowerCase()] = Object.values(result)[0] || 0;
+app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
+    try {
+        const [enrollees] = await db.query('SELECT COUNT(*) as count FROM enrollees');
+        const [claims] = await db.query('SELECT COUNT(*) as count FROM claims');
+        const [pending] = await db.query('SELECT COUNT(*) as count FROM claims WHERE status = "Pending"');
+        const [approved] = await db.query('SELECT COUNT(*) as count FROM claims WHERE status = "Approved"');
+        const [rejected] = await db.query('SELECT COUNT(*) as count FROM claims WHERE status = "Rejected"');
+        const [amount] = await db.query('SELECT SUM(amount) as total FROM claims WHERE status = "Approved"');
+        
+        res.json({
+            enrollees: enrollees[0].count || 0,
+            claims: claims[0].count || 0,
+            pending: pending[0].count || 0,
+            approved: approved[0].count || 0,
+            rejected: rejected[0].count || 0,
+            amount: amount[0].total || 0
         });
-        res.json(response);
-    }).catch(err => res.status(500).json({ error: err.message }));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/charts/claims-by-status', requireAuth, (req, res) => {
-    db.query('SELECT status, COUNT(*) as count FROM claims GROUP BY status', (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/charts/claims-by-status', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT status, COUNT(*) as count FROM claims GROUP BY status');
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/charts/monthly-trend', requireAuth, (req, res) => {
-    db.query(`SELECT DATE_FORMAT(submitted_at, '%Y-%m') as month, COUNT(*) as count
-              FROM claims WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-              GROUP BY month ORDER BY month ASC`, 
-    (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/charts/monthly-trend', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT DATE_FORMAT(submitted_at, '%Y-%m') as month, COUNT(*) as count
+            FROM claims 
+            WHERE submitted_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+            GROUP BY month ORDER BY month ASC
+        `);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/charts/top-providers', requireAuth, (req, res) => {
-    db.query(`SELECT provider_name, COUNT(*) as claim_count
-              FROM claims GROUP BY provider_name ORDER BY claim_count DESC LIMIT 5`,
-    (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/charts/top-providers', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT provider_name, COUNT(*) as claim_count
+            FROM claims GROUP BY provider_name ORDER BY claim_count DESC LIMIT 5
+        `);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
-app.get('/api/recent-claims', requireAuth, (req, res) => {
-    db.query(`SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name 
-              FROM claims JOIN enrollees ON claims.enrollee_id = enrollees.id 
-              ORDER BY claims.submitted_at DESC LIMIT 10`,
-    (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+app.get('/api/recent-claims', requireAuth, async (req, res) => {
+    try {
+        const [results] = await db.query(`
+            SELECT claims.*, CONCAT(enrollees.first_name, ' ', enrollees.last_name) as enrollee_name 
+            FROM claims 
+            JOIN enrollees ON claims.enrollee_id = enrollees.id 
+            ORDER BY claims.submitted_at DESC LIMIT 10
+        `);
         res.json(results);
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 const PORT = process.env.PORT || 8080;
