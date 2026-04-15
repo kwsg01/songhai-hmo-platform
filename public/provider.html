@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Provider Portal - Songhai HMO</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .login-box, .dashboard {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-top: 50px;
+        }
+        h1, h2 {
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #1557b0;
+        }
+        .logout-btn {
+            background: #dc3545;
+            width: auto;
+            padding: 8px 15px;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #1a73e8;
+            color: white;
+        }
+        .status-pending { color: #ff9800; font-weight: bold; }
+        .status-approved { color: #28a745; font-weight: bold; }
+        .status-rejected { color: #dc3545; font-weight: bold; }
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            background: #1a73e8;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="nav-links">
+        <a href="/">🏠 Home</a>
+        <a href="/admin-login.html">Admin</a>
+        <a href="/callcentre.html">Call Centre</a>
+        <a href="/dashboard.html">Dashboard</a>
+    </div>
+
+    <div id="loginSection" class="login-box">
+        <h1>🏥 Provider Portal</h1>
+        <h2>Login to Access Your Claims</h2>
+        <div class="info-box">
+            <strong>Test Credentials:</strong><br>
+            Email: provider@test.com<br>
+            Password: provider123
+        </div>
+        <input type="email" id="email" placeholder="Email" value="provider@test.com">
+        <input type="password" id="password" placeholder="Password" value="provider123">
+        <button onclick="login()">Login</button>
+        <a href="/" class="back-link">← Back to Homepage</a>
+    </div>
+
+    <div id="dashboardSection" style="display:none;">
+        <button class="logout-btn" onclick="logout()">Logout</button>
+        <div class="dashboard">
+            <h1 id="welcomeMsg"></h1>
+            <h2>My Assigned Claims</h2>
+            <table id="claimsTable">
+                <thead>
+                    <tr><th>ID</th><th>Enrollee</th><th>Service</th><th>Amount</th><th>Status</th><th>Date Submitted</th></tr>
+                </thead>
+                <tbody id="claimsTableBody">
+                    <tr><td colspan="6" style="text-align:center;">Login to view claims</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentProvider = null;
+
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        
+        try {
+            const res = await fetch('/api/provider/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            
+            if (res.ok) {
+                currentProvider = await res.json();
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+                document.getElementById('welcomeMsg').innerHTML = `Welcome, ${currentProvider.provider_name}`;
+                loadMyClaims();
+            } else {
+                const error = await res.json();
+                alert('Login failed: ' + error.error);
+            }
+        } catch (error) {
+            alert('Connection error: ' + error.message);
+        }
+    }
+
+    async function loadMyClaims() {
+        try {
+            const res = await fetch(`/api/provider/${currentProvider.id}/claims`);
+            const claims = await res.json();
+            const tbody = document.getElementById('claimsTableBody');
+            
+            if (claims.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No claims assigned to you yet</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            claims.forEach(c => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${c.id}</td>
+                        <td>${c.enrollee_name}</td>
+                        <td>${c.service_description.substring(0, 50)}</td>
+                        <td>₦${parseInt(c.amount).toLocaleString()}</td>
+                        <td class="status-${c.status.toLowerCase()}">${c.status}</td>
+                        <td>${new Date(c.submitted_at).toLocaleDateString()}</td>
+                    </tr>
+                `;
+            });
+        } catch (error) {
+            alert('Error loading claims: ' + error.message);
+        }
+    }
+
+    function logout() {
+        currentProvider = null;
+        document.getElementById('loginSection').style.display = 'block';
+        document.getElementById('dashboardSection').style.display = 'none';
+    }
+</script>
+</body>
+</html>

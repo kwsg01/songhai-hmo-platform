@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Songhai HMO - Admin Portal</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #1a73e8;
+        }
+        .user-info {
+            background: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            background: #ddd;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 5px;
+        }
+        .tab-btn.active {
+            background: #1a73e8;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        input, select, button, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #1557b0;
+        }
+        .approve-btn {
+            background: #28a745;
+            margin-right: 5px;
+        }
+        .reject-btn {
+            background: #dc3545;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #1a73e8;
+            color: white;
+        }
+        .status-pending { color: #ff9800; font-weight: bold; }
+        .status-approved { color: #28a745; font-weight: bold; }
+        .status-rejected { color: #dc3545; font-weight: bold; }
+        .nav-links a {
+            display: inline-block;
+            background: #17a2b8;
+            padding: 10px 20px;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🏥 Songhai Health Trust - Admin Portal</h1>
+        <div class="user-info" id="userInfo">
+            <span id="userName">Loading...</span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+    
+    <div class="nav-links">
+        <a href="/reports.html" style="background:#28a745;">📊 Reports</a>
+        <a href="/dashboard.html">📊 Dashboard</a>
+        <a href="/provider.html">🔐 Provider Portal</a>
+        <a href="/callcentre.html" style="background:#ff9800;">📞 Call Centre</a>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('enrolment')">📝 Enrolment</button>
+        <button class="tab-btn" onclick="switchTab('claims')">💰 Claims Management</button>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <div id="enrolment-tab" class="tab-content active">
+        <h2>Register New Enrollee</h2>
+        <form id="enrolmentForm">
+            <input type="text" id="first_name" placeholder="First Name" required>
+            <input type="text" id="last_name" placeholder="Last Name" required>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="tel" id="phone" placeholder="Phone Number">
+            <select id="plan_type">
+                <option value="Basic">Basic Plan</option>
+                <option value="Standard">Standard Plan</option>
+                <option value="Premium">Premium Plan</option>
+            </select>
+            <button type="submit">✅ Register Enrollee</button>
+        </form>
+        
+        <h2>📋 Registered Enrollees</h2>
+        <table id="enrolleesTable">
+            <thead>
+                <tr><th>ID</th><th>Full Name</th><th>Email</th><th>Phone</th><th>Plan</th><th>Date</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <div id="claims-tab" class="tab-content">
+        <h2>Submit New Claim</h2>
+        <form id="claimForm">
+            <select id="enrollee_id" required>
+                <option value="">Select Enrollee</option>
+            </select>
+            <select id="provider_id" required>
+                <option value="">Assign to Provider</option>
+            </select>
+            <input type="text" id="provider_name" placeholder="Provider/Hospital Name" required>
+            <textarea id="service_description" placeholder="Service Description" required></textarea>
+            <input type="number" id="amount" placeholder="Claim Amount (₦)" required>
+            <button type="submit">📤 Submit Claim</button>
+        </form>
+        
+        <h2>📋 All Claims <button onclick="loadClaims()" style="width:auto;padding:5px 15px;">🔄 Refresh</button></h2>
+        <table id="claimsTable">
+            <thead>
+                <tr><th>ID</th><th>Enrollee</th><th>Provider</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th><th>Action</th></tr>
+            </thead>
+            <tbody id="claimsTableBody">
+                <tr><td colspan="8" style="text-align:center;">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let currentAdmin = null;
+
+    async function checkAuth() {
+        try {
+            const res = await fetch('/api/admin/check-session', { credentials: 'include' });
+            const data = await res.json();
+            
+            if (!data.authenticated) {
+                window.location.href = '/admin-login.html';
+                return false;
+            }
+            
+            currentAdmin = data.admin;
+            document.getElementById('userName').innerHTML = `👤 ${currentAdmin.full_name || currentAdmin.username} (${currentAdmin.role})`;
+            return true;
+        } catch (error) {
+            window.location.href = '/admin-login.html';
+            return false;
+        }
+    }
+
+    function showNotification(message, isError = false) {
+        const notification = document.getElementById('notification');
+        notification.style.backgroundColor = isError ? '#dc3545' : '#28a745';
+        notification.innerText = message;
+        notification.style.display = 'block';
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 5000);
+    }
+
+    async function logout() {
+        await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+        window.location.href = '/admin-login.html';
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`${tab}-tab`).classList.add('active');
+        event.target.classList.add('active');
+        if (tab === 'claims') {
+            loadEnrolleeDropdown();
+            loadProviderDropdown();
+            loadClaims();
+        }
+    }
+
+    async function loadEnrolleeDropdown() {
+        const res = await fetch('/api/enrollees', { credentials: 'include' });
+        const data = await res.json();
+        const dropdown = document.getElementById('enrollee_id');
+        dropdown.innerHTML = '<option value="">Select Enrollee</option>';
+        data.forEach(e => {
+            dropdown.innerHTML += `<option value="${e.id}">${e.first_name} ${e.last_name} (${e.plan_type})</option>`;
+        });
+    }
+
+    async function loadProviderDropdown() {
+        const res = await fetch('/api/providers', { credentials: 'include' });
+        const data = await res.json();
+        const dropdown = document.getElementById('provider_id');
+        dropdown.innerHTML = '<option value="">Assign to Provider</option>';
+        data.forEach(p => {
+            dropdown.innerHTML += `<option value="${p.id}">${p.provider_name}</option>`;
+        });
+    }
+
+    async function loadClaims() {
+        const res = await fetch('/api/claims', { credentials: 'include' });
+        const claims = await res.json();
+        const tbody = document.getElementById('claimsTableBody');
+        
+        if (claims.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No claims yet</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        claims.forEach(c => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${c.id}</td>
+                    <td>${c.enrollee_name}</td>
+                    <td>${c.provider_name}</td>
+                    <td>${c.service_description.substring(0, 40)}</td>
+                    <td>₦${parseInt(c.amount).toLocaleString()}</td>
+                    <td class="status-${c.status.toLowerCase()}">${c.status}</td>
+                    <td>${new Date(c.submitted_at).toLocaleDateString()}</td>
+                    <td>${c.status === 'Pending' ? 
+                        `<button class="approve-btn" onclick="updateClaim(${c.id}, 'Approved')">Approve</button>
+                         <button class="reject-btn" onclick="updateClaim(${c.id}, 'Rejected')">Reject</button>` : 
+                        '✓ Processed'}</td>
+                </tr>
+            `;
+        });
+    }
+
+    async function updateClaim(id, status) {
+        const notes = prompt('Enter notes for provider (optional):');
+        try {
+            const res = await fetch(`/api/claims/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, admin_notes: notes || '' }),
+                credentials: 'include'
+            });
+            const result = await res.json();
+            
+            if (result.emailSent) {
+                showNotification(`✅ Claim ${status.toLowerCase()}! Email sent.`);
+            } else {
+                showNotification(`✅ Claim ${status.toLowerCase()}!`);
+            }
+            
+            loadClaims();
+        } catch (error) {
+            showNotification('Error updating claim', true);
+        }
+    }
+
+    document.getElementById('claimForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            enrollee_id: document.getElementById('enrollee_id').value,
+            provider_id: document.getElementById('provider_id').value,
+            provider_name: document.getElementById('provider_name').value,
+            service_description: document.getElementById('service_description').value,
+            amount: document.getElementById('amount').value
+        };
+        await fetch('/api/claims', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            credentials: 'include'
+        });
+        showNotification('Claim submitted successfully!');
+        e.target.reset();
+        loadClaims();
+    });
+
+    document.getElementById('enrolmentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = {
+            first_name: document.getElementById('first_name').value,
+            last_name: document.getElementById('last_name').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            plan_type: document.getElementById('plan_type').value
+        };
+        await fetch('/api/enrollees', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+            credentials: 'include'
+        });
+        showNotification('Enrollee registered successfully!');
+        loadEnrollees();
+        e.target.reset();
+    });
+
+    async function loadEnrollees() {
+        const res = await fetch('/api/enrollees', { credentials: 'include' });
+        const data = await res.json();
+        const tbody = document.querySelector('#enrolleesTable tbody');
+        tbody.innerHTML = '';
+        data.forEach(e => {
+            tbody.innerHTML += `<tr>
+                <td>${e.id}</td>
+                <td>${e.first_name} ${e.last_name}</td>
+                <td>${e.email}</td>
+                <td>${e.phone || '-'}</td>
+                <td>${e.plan_type}</td>
+                <td>${new Date(e.created_at).toLocaleDateString()}</td>
+            </tr>`;
+        });
+    }
+
+    // Initialize
+    checkAuth().then(authenticated => {
+        if (authenticated) {
+            loadEnrollees();
+        }
+    });
+</script>
+</body>
+</html>

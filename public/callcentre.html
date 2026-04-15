@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Call Centre - Songhai HMO</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .login-box, .dashboard {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+        input, button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            background: #1a73e8;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #1557b0;
+        }
+        .logout-btn {
+            background: #dc3545;
+            width: auto;
+            padding: 8px 15px;
+            margin-bottom: 20px;
+        }
+        .claim-card {
+            background: #f9f9f9;
+            border-left: 4px solid #ff9800;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .claim-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .claim-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .claim-id {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+        .claim-date {
+            color: #666;
+        }
+        .claim-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        .detail-item {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 12px;
+        }
+        .detail-value {
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        .caller-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .approve-btn {
+            background: #28a745;
+            flex: 1;
+        }
+        .reject-btn {
+            background: #dc3545;
+            flex: 1;
+        }
+        .notes-input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .stats-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pending-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff9800;
+        }
+        .auto-refresh {
+            color: #28a745;
+            font-size: 14px;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            background: #1a73e8;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #999;
+        }
+        @keyframes pulse {
+            0% { border-left-color: #ff9800; }
+            100% { border-left-color: #ffcc80; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="loginSection" class="login-box">
+        <h1>📞 Call Centre Portal</h1>
+        <h2>Real-time Claim Authorization</h2>
+        <div style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <strong>Test Credentials:</strong><br>
+            Email: callcentre@songhaihmo.com<br>
+            Password: centre123
+        </div>
+        <input type="email" id="email" placeholder="Email" value="callcentre@songhaihmo.com">
+        <input type="password" id="password" placeholder="Password" value="centre123">
+        <button onclick="login()">Login to Call Centre</button>
+        <a href="/" style="display: inline-block; margin-top: 15px; color: #1a73e8; text-decoration: none;">← Back to Admin Portal</a>
+    </div>
+
+    <div id="dashboardSection" style="display:none;">
+        <div class="nav-links">
+            <a href="/">🏠 Admin</a>
+            <a href="/provider.html">🔐 Provider</a>
+            <a href="/dashboard.html">📊 Dashboard</a>
+            <a href="/callcentre.html" style="background:#ff9800;">📞 Call Centre</a>
+        </div>
+        
+        <div class="stats-bar">
+            <div>
+                <strong>👤 Agent:</strong> <span id="agentName">-</span>
+            </div>
+            <div>
+                <strong>⏳ Pending Claims:</strong> <span id="pendingCount" class="pending-count">0</span>
+            </div>
+            <div class="auto-refresh">
+                🔄 Auto-refresh every 10 seconds
+            </div>
+            <button onclick="logout()" class="logout-btn" style="margin:0;">Logout</button>
+        </div>
+
+        <div class="dashboard">
+            <h1>📞 Real-time Claim Authorization</h1>
+            <div id="claimsList">
+                <div class="empty-state">Loading pending claims...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAgent = null;
+    let refreshInterval = null;
+
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        
+        try {
+            const res = await fetch('/api/callcentre/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            
+            if (res.ok) {
+                currentAgent = await res.json();
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('dashboardSection').style.display = 'block';
+                document.getElementById('agentName').innerText = currentAgent.full_name;
+                loadPendingClaims();
+                
+                // Auto-refresh every 10 seconds
+                if (refreshInterval) clearInterval(refreshInterval);
+                refreshInterval = setInterval(loadPendingClaims, 10000);
+            } else {
+                alert('Login failed. Use callcentre@songhaihmo.com / centre123');
+            }
+        } catch (error) {
+            alert('Connection error: ' + error.message);
+        }
+    }
+
+    async function loadPendingClaims() {
+        try {
+            const res = await fetch('/api/callcentre/pending-claims');
+            const claims = await res.json();
+            const container = document.getElementById('claimsList');
+            document.getElementById('pendingCount').innerText = claims.length;
+            
+            if (claims.length === 0) {
+                container.innerHTML = '<div class="empty-state">✅ No pending claims! All claims have been processed.</div>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            claims.forEach(claim => {
+                container.innerHTML += `
+                    <div class="claim-card" id="claim-${claim.id}">
+                        <div class="claim-header">
+                            <span class="claim-id">Claim #${claim.id}</span>
+                            <span class="claim-date">Submitted: ${new Date(claim.submitted_at).toLocaleString()}</span>
+                        </div>
+                        
+                        <div class="caller-info">
+                            <strong>📞 Caller Information:</strong><br>
+                            Enrollee: ${claim.enrollee_name}<br>
+                            Phone: ${claim.enrollee_phone || 'Not provided'}<br>
+                            Alternative: ${claim.alternative_phone || 'N/A'}
+                        </div>
+                        
+                        <div class="claim-details">
+                            <div class="detail-item">
+                                <div class="detail-label">Provider</div>
+                                <div class="detail-value">${claim.provider_name}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Service</div>
+                                <div class="detail-value">${claim.service_description}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Amount Requested</div>
+                                <div class="detail-value">₦${parseInt(claim.amount).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        
+                        <textarea id="notes-${claim.id}" class="notes-input" placeholder="Authorization notes (optional)"></textarea>
+                        
+                        <div class="action-buttons">
+                            <button class="approve-btn" onclick="authorizeClaim(${claim.id}, 'Approved')">✅ Approve Claim</button>
+                            <button class="reject-btn" onclick="authorizeClaim(${claim.id}, 'Rejected')">❌ Reject Claim</button>
+                        </div>
+                    </div>
+                `;
+            });
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    async function authorizeClaim(claimId, status) {
+        const notes = document.getElementById(`notes-${claimId}`).value;
+        
+        try {
+            const res = await fetch(`/api/claims/${claimId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, admin_notes: notes || `Authorized by call centre: ${status}` })
+            });
+            
+            const result = await res.json();
+            
+            if (result.emailSent) {
+                alert(`✅ Claim ${status.toLowerCase()}! Email notification sent to provider.`);
+            } else {
+                alert(`✅ Claim ${status.toLowerCase()}!`);
+            }
+            
+            // Remove the claim card with animation
+            const claimCard = document.getElementById(`claim-${claimId}`);
+            claimCard.style.opacity = '0';
+            setTimeout(() => {
+                loadPendingClaims();
+            }, 300);
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+
+    function logout() {
+        if (refreshInterval) clearInterval(refreshInterval);
+        currentAgent = null;
+        document.getElementById('loginSection').style.display = 'block';
+        document.getElementById('dashboardSection').style.display = 'none';
+    }
+</script>
+</body>
+</html>

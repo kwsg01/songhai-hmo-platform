@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard - Songhai HMO</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #1a73e8;
+            margin-bottom: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+        .stat-card .currency {
+            font-size: 24px;
+            color: #28a745;
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .chart-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .chart-card h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        canvas {
+            max-height: 300px;
+        }
+        .recent-claims {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #1a73e8;
+            color: white;
+        }
+        .status-pending { color: #ff9800; font-weight: bold; }
+        .status-approved { color: #28a745; font-weight: bold; }
+        .status-rejected { color: #dc3545; font-weight: bold; }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a, .export-btn {
+            background: #1a73e8;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            display: inline-block;
+            border: none;
+            cursor: pointer;
+        }
+        .nav-links a:hover, .export-btn:hover {
+            background: #1557b0;
+        }
+        .export-excel {
+            background: #28a745;
+        }
+        .export-pdf {
+            background: #dc3545;
+        }
+        .refresh-btn {
+            background: #17a2b8;
+            padding: 8px 15px;
+            margin-left: 10px;
+        }
+        .export-section {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 HMO Analytics Dashboard</h1>
+    
+    <div class="nav-links">
+        <a href="/">🏠 Home</a>
+        <a href="/admin-login.html">Admin</a>
+        <a href="/provider.html">Provider</a>
+        <a href="/callcentre.html">Call Centre</a>
+        <a href="/reports.html" style="background:#28a745;">Reports</a>
+    </div>
+
+    <div class="export-section">
+        <button class="export-btn export-excel" onclick="window.location.href='/api/export/excel'">📊 Export to Excel</button>
+        <button class="export-btn export-pdf" onclick="window.location.href='/api/export/pdf'">📄 Export to PDF</button>
+        <button class="export-btn refresh-btn" onclick="location.reload()">🔄 Refresh Dashboard</button>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><h3>Total Enrollees</h3><div class="number" id="totalEnrollees">-</div></div>
+        <div class="stat-card"><h3>Total Claims</h3><div class="number" id="totalClaims">-</div></div>
+        <div class="stat-card"><h3>Pending</h3><div class="number" id="pending">-</div></div>
+        <div class="stat-card"><h3>Approved</h3><div class="number" id="approved">-</div></div>
+        <div class="stat-card"><h3>Rejected</h3><div class="number" id="rejected">-</div></div>
+        <div class="stat-card"><h3>Total Payout</h3><div class="currency" id="totalAmount">₦-</div></div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <h3>Claims by Status</h3>
+            <canvas id="statusChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h3>Monthly Claims Trend</h3>
+            <canvas id="trendChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h3>Top 5 Providers</h3>
+            <canvas id="providersChart"></canvas>
+        </div>
+    </div>
+
+    <div class="recent-claims">
+        <h3>Recent Claims</h3>
+        <table id="recentClaimsTable">
+            <thead>
+                <tr><th>ID</th><th>Enrollee</th><th>Provider</th><th>Service</th><th>Amount</th><th>Status</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="7">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let statusChart, trendChart, providersChart;
+
+    async function checkAuth() {
+        try {
+            const res = await fetch('/api/admin/check-session', { credentials: 'include' });
+            const data = await res.json();
+            if (!data.authenticated) {
+                window.location.href = '/admin-login.html';
+                return false;
+            }
+            return true;
+        } catch (error) {
+            window.location.href = '/admin-login.html';
+            return false;
+        }
+    }
+
+    async function loadAllData() {
+        await loadStats();
+        await loadStatusChart();
+        await loadTrendChart();
+        await loadProvidersChart();
+        await loadRecentClaims();
+    }
+
+    async function loadStats() {
+        const res = await fetch('/api/dashboard/stats', { credentials: 'include' });
+        const data = await res.json();
+        document.getElementById('totalEnrollees').innerText = data.enrollees || 0;
+        document.getElementById('totalClaims').innerText = data.claims || 0;
+        document.getElementById('pending').innerText = data.pending || 0;
+        document.getElementById('approved').innerText = data.approved || 0;
+        document.getElementById('rejected').innerText = data.rejected || 0;
+        document.getElementById('totalAmount').innerHTML = `₦${(data.amount || 0).toLocaleString()}`;
+    }
+
+    async function loadStatusChart() {
+        const res = await fetch('/api/charts/claims-by-status', { credentials: 'include' });
+        const data = await res.json();
+        const labels = data.map(d => d.status);
+        const counts = data.map(d => d.count);
+        
+        if (statusChart) statusChart.destroy();
+        const ctx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(ctx, {
+            type: 'pie',
+            data: { labels, datasets: [{ data: counts, backgroundColor: ['#ff9800', '#28a745', '#dc3545'] }] }
+        });
+    }
+
+    async function loadTrendChart() {
+        const res = await fetch('/api/charts/monthly-trend', { credentials: 'include' });
+        const data = await res.json();
+        const labels = data.map(d => d.month);
+        const counts = data.map(d => d.count);
+        
+        if (trendChart) trendChart.destroy();
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Claims', data: counts, borderColor: '#1a73e8', tension: 0.4 }] }
+        });
+    }
+
+    async function loadProvidersChart() {
+        const res = await fetch('/api/charts/top-providers', { credentials: 'include' });
+        const data = await res.json();
+        const labels = data.map(d => d.provider_name.substring(0, 15));
+        const counts = data.map(d => d.claim_count);
+        
+        if (providersChart) providersChart.destroy();
+        const ctx = document.getElementById('providersChart').getContext('2d');
+        providersChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'Claims', data: counts, backgroundColor: '#17a2b8' }] }
+        });
+    }
+
+    async function loadRecentClaims() {
+        const res = await fetch('/api/recent-claims', { credentials: 'include' });
+        const claims = await res.json();
+        const tbody = document.querySelector('#recentClaimsTable tbody');
+        
+        if (claims.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7">No claims yet</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        claims.forEach(c => {
+            tbody.innerHTML += `<tr>
+                <td>${c.id}</td>
+                <td>${c.enrollee_name}</td>
+                <td>${c.provider_name}</td>
+                <td>${c.service_description.substring(0, 30)}${c.service_description.length > 30 ? '...' : ''}</td>
+                <td>₦${parseInt(c.amount).toLocaleString()}</td>
+                <td class="status-${c.status.toLowerCase()}">${c.status}</td>
+                <td>${new Date(c.submitted_at).toLocaleDateString()}</td>
+            </tr>`;
+        });
+    }
+
+    checkAuth().then(authenticated => {
+        if (authenticated) {
+            loadAllData();
+        }
+    });
+</script>
+</body>
+</html>

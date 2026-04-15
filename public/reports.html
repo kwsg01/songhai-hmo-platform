@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Custom Reports - Songhai HMO</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #1a73e8;
+        }
+        .user-info {
+            background: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            background: #1a73e8;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .filter-card, .results-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .filter-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .filter-field {
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-field label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input, select, button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .generate-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 12px 25px;
+            margin-top: 20px;
+        }
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .export-excel {
+            background: #28a745;
+        }
+        .export-pdf {
+            background: #dc3545;
+        }
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #1a73e8;
+        }
+        .stat-card h4 {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a73e8;
+        }
+        .stat-currency {
+            font-size: 20px;
+            color: #28a745;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background: #1a73e8;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        .status-pending { color: #ff9800; font-weight: bold; }
+        .status-approved { color: #28a745; font-weight: bold; }
+        .status-rejected { color: #dc3545; font-weight: bold; }
+        .table-container {
+            overflow-x: auto;
+            max-height: 500px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        @media print {
+            .no-print { display: none; }
+            body { background: white; }
+            .filter-card { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📊 Custom Report Builder</h1>
+        <div class="user-info" id="userInfo">
+            <span id="userName">Loading...</span>
+            <button class="logout-btn no-print" onclick="logout()">Logout</button>
+        </div>
+    </div>
+    
+    <div class="nav-links no-print">
+        <a href="/">🏠 Home</a>
+        <a href="/index.html">Admin Portal</a>
+        <a href="/dashboard.html">Dashboard</a>
+        <a href="/provider.html">Provider</a>
+        <a href="/callcentre.html">Call Centre</a>
+        <a href="/reports.html" style="background:#28a745;">Reports</a>
+    </div>
+
+    <div class="filter-card no-print">
+        <h2>🔍 Report Filters</h2>
+        <div class="filter-group">
+            <div class="filter-field">
+                <label>Start Date</label>
+                <input type="date" id="start_date">
+            </div>
+            <div class="filter-field">
+                <label>End Date</label>
+                <input type="date" id="end_date">
+            </div>
+            <div class="filter-field">
+                <label>Claim Status</label>
+                <select id="status_filter">
+                    <option value="All">All Claims</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                </select>
+            </div>
+            <div class="filter-field">
+                <label>Provider</label>
+                <select id="provider_filter">
+                    <option value="All">All Providers</option>
+                </select>
+            </div>
+        </div>
+        <button class="generate-btn" onclick="generateReport()">🔍 Generate Report</button>
+    </div>
+
+    <div class="results-card">
+        <div class="export-buttons no-print">
+            <button class="generate-btn export-excel" onclick="exportToExcel()">📊 Export to Excel</button>
+            <button class="generate-btn export-pdf" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        </div>
+
+        <div id="summaryStats" class="summary-stats"></div>
+
+        <h2>📋 Report Results</h2>
+        <div id="reportResults" class="table-container">
+            <div class="loading">Select filters and click Generate Report</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentAdmin = null;
+    let currentReportData = null;
+
+    async function checkAuth() {
+        try {
+            const res = await fetch('/api/admin/check-session', { credentials: 'include' });
+            const data = await res.json();
+            
+            if (!data.authenticated) {
+                window.location.href = '/admin-login.html';
+                return false;
+            }
+            
+            currentAdmin = data.admin;
+            document.getElementById('userName').innerHTML = `👤 ${currentAdmin.full_name || currentAdmin.username}`;
+            return true;
+        } catch (error) {
+            window.location.href = '/admin-login.html';
+            return false;
+        }
+    }
+
+    async function logout() {
+        await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+        window.location.href = '/admin-login.html';
+    }
+
+    async function loadProviders() {
+        const res = await fetch('/api/providers', { credentials: 'include' });
+        const providers = await res.json();
+        const dropdown = document.getElementById('provider_filter');
+        providers.forEach(p => {
+            dropdown.innerHTML += `<option value="${p.id}">${p.provider_name}</option>`;
+        });
+    }
+
+    async function generateReport() {
+        const start_date = document.getElementById('start_date').value;
+        const end_date = document.getElementById('end_date').value;
+        const status = document.getElementById('status_filter').value;
+        const provider_id = document.getElementById('provider_filter').value;
+        
+        document.getElementById('reportResults').innerHTML = '<div class="loading">Loading report...</div>';
+        
+        try {
+            const res = await fetch('/api/reports/custom', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date, end_date, status, provider_id }),
+                credentials: 'include'
+            });
+            
+            const data = await res.json();
+            currentReportData = data;
+            displaySummary(data.summary);
+            displayReport(data.claims);
+        } catch (error) {
+            document.getElementById('reportResults').innerHTML = '<div class="no-data">Error loading report</div>';
+        }
+    }
+
+    function displaySummary(summary) {
+        const summaryHtml = `
+            <div class="stat-card">
+                <h4>Total Claims</h4>
+                <div class="stat-number">${summary.total_claims}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Total Amount</h4>
+                <div class="stat-currency">₦${summary.total_amount.toLocaleString()}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Approved</h4>
+                <div class="stat-number" style="color:#28a745">${summary.approved_count}</div>
+                <div style="font-size:12px">₦${summary.approved_amount.toLocaleString()}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Rejected</h4>
+                <div class="stat-number" style="color:#dc3545">${summary.rejected_count}</div>
+            </div>
+            <div class="stat-card">
+                <h4>Pending</h4>
+                <div class="stat-number" style="color:#ff9800">${summary.pending_count}</div>
+            </div>
+        `;
+        document.getElementById('summaryStats').innerHTML = summaryHtml;
+    }
+
+    function displayReport(claims) {
+        if (!claims || claims.length === 0) {
+            document.getElementById('reportResults').innerHTML = '<div class="no-data">No claims found matching the filters</div>';
+            return;
+        }
+        
+        let tableHtml = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Enrollee</th>
+                        <th>Provider</th>
+                        <th>Service</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        claims.forEach(c => {
+            tableHtml += `
+                <tr>
+                    <td>${c.id}</td>
+                    <td>${c.enrollee_name}</td>
+                    <td>${c.provider_name}</td>
+                    <td>${c.service_description.substring(0, 50)}${c.service_description.length > 50 ? '...' : ''}</td>
+                    <td>₦${parseInt(c.amount).toLocaleString()}</td>
+                    <td class="status-${c.status.toLowerCase()}">${c.status}</td>
+                    <td>${c.submitted_date}</td>
+                    <td>${c.admin_notes || '-'}</td>
+                </tr>
+            `;
+        });
+        
+        tableHtml += '</tbody></table>';
+        document.getElementById('reportResults').innerHTML = tableHtml;
+    }
+
+    async function exportToExcel() {
+        const start_date = document.getElementById('start_date').value;
+        const end_date = document.getElementById('end_date').value;
+        const status = document.getElementById('status_filter').value;
+        const provider_id = document.getElementById('provider_filter').value;
+        
+        try {
+            const res = await fetch('/api/reports/export-excel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date, end_date, status, provider_id }),
+                credentials: 'include'
+            });
+            
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hmo-report-${new Date().toISOString().slice(0,19)}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            alert('Error exporting to Excel');
+        }
+    }
+
+    checkAuth().then(authenticated => {
+        if (authenticated) {
+            loadProviders();
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30);
+            document.getElementById('start_date').value = startDate.toISOString().slice(0,10);
+            document.getElementById('end_date').value = endDate.toISOString().slice(0,10);
+            generateReport();
+        }
+    });
+</script>
+</body>
+</html>
